@@ -125,7 +125,7 @@ with st.sidebar:
             'Content-Type': 'application/x-www-form-urlencoded'
         }
         data = {
-            'client_Id': CLIENT_ID,
+            'client_id': CLIENT_ID,
             'grant_type': 'authorization_code',
             'redirect_uri': REDIRECT_URI,
             'code': auth_code
@@ -154,19 +154,19 @@ with st.sidebar:
                     hr_data = hr_res.get('activities-heart', [{}])[0].get('value', {})
                     st.session_state.ui_hr = int(hr_data.get('restingHeartRate', 74))
                     
-                    # Fetch Activity/Steps Data Safely
-                    step_res = requests.get("https://api.fitbit.com/1/user/-/activities/date/today.json", headers=api_headers, timeout=3).json()
-                    st.session_state.ui_steps = int(step_res.get('summary', {}).get('steps', 6800))
+                   # Fetch Activity/Steps Data Safely (Using the Time Series API)
+                    step_res = requests.get("https://api.fitbit.com/1/user/-/activities/steps/date/today/1d.json", headers=api_headers, timeout=3).json()
+                    step_data = step_res.get('activities-steps', [{}])[0]
+                    st.session_state.ui_steps = int(step_data.get('value', 6800))
                     
-                    # Fetch Sleep Data Safely
-                    sleep_res = requests.get("https://api.fitbit.com/1.2/user/-/sleep/date/today.json", headers=api_headers, timeout=3).json()
+                    # Fetch the MOST RECENT Sleep Data Safely (Bypasses the timezone/today glitch)
+                    sleep_url = "https://api.fitbit.com/1.2/user/-/sleep/list.json?beforeDate=2030-01-01&sort=desc&limit=1&offset=0"
+                    sleep_res = requests.get(sleep_url, headers=api_headers, timeout=5).json()
+                    
                     if sleep_res.get('sleep') and len(sleep_res['sleep']) > 0:
-                        st.session_state.ui_duration = float(round(sleep_res['sleep'][0]['duration'] / 3600000, 1))
-                        st.session_state.ui_efficiency = int(sleep_res['sleep'][0]['efficiency'])
-                    else:
-                        # Fallback if the user hasn't tracked sleep today
-                        st.session_state.live_duration = 5.6
-                        st.session_state.live_efficiency = 80
+                        latest_sleep = sleep_res['sleep'][0]
+                        st.session_state.ui_duration = float(round(latest_sleep['duration'] / 3600000, 1))
+                        st.session_state.ui_efficiency = int(latest_sleep['efficiency'])
                     
                     st.session_state.connected = True
                     st.success("✅ Secure Connection Established")
@@ -383,6 +383,46 @@ if run_diagnosis and model is not None:
             
             st.metric("Primary Risk Driver", impact_features[worst_idx], delta="Critical Factor", delta_color="inverse")
             st.metric("Primary Protective Factor", impact_features[best_idx], delta="Healthy Habit")
+            
+            st.markdown("---")
+        # --- EXPORT REPORT FEATURE ---
+        report_text = f"""
+        =========================================
+        SLEEPAI CLINICAL DIAGNOSTIC REPORT
+        =========================================
+        Date: {time.strftime('%Y-%m-%d %H:%M:%S')}
+        Patient Age: {age} | Gender: {gender}
+        
+        --- BIOMETRIC TELEMETRY ---
+        Sleep Duration: {duration} hours
+        Sleep Efficiency: {efficiency}%
+        Resting Heart Rate: {hr} bpm
+        Daily Steps: {steps}
+        
+        --- LIFESTYLE FACTORS ---
+        Stress Level: {stress}/10
+        Caffeine Intake: {caffeine} mg
+        Alcohol: {alcohol} units
+        Screen Time: {screen} hours
+        
+        =========================================
+        AI DIAGNOSTIC VERDICT
+        =========================================
+        Primary Condition: {condition}
+        Model Confidence: {confidence:.1f}%
+        Composite Health Score: {health_score}/100
+        
+        --- IDENTIFIED RISKS ---
+        Primary Risk Driver: {impact_features[worst_idx]}
+        """
+        
+        st.download_button(
+            label="📄 Download Clinical Report (.txt)",
+            data=report_text,
+            file_name=f"SleepAI_Report_{time.strftime('%Y%m%d')}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
 
     # TAB 2: Sleep Cycle Graph
     with tab2:
