@@ -171,6 +171,35 @@ with st.sidebar:
                     st.session_state.connected = True
                     st.success("✅ Secure Connection Established")
                     st.query_params.clear() # Clean up the URL
+                    
+                    
+                    
+                    # --- FETCH RESCUETIME SCREEN DATA ---
+                    try:
+                        RT_KEY = st.secrets["rescuetime"]["api_key"]
+                        today_date = time.strftime('%Y-%m-%d')
+                        
+                        # The RescueTime Analytic Data API URL
+                        rt_url = f"https://www.rescuetime.com/anapi/data?key={RT_KEY}&format=json&restrict_begin={today_date}&restrict_end={today_date}&perspective=interval&resolution_time=day"
+                        
+                        rt_res = requests.get(rt_url, timeout=5).json()
+                        
+                        # RescueTime returns data in seconds. 
+                        # We extract the total seconds and convert to hours for the AI model.
+                        if rt_res.get('rows') and len(rt_res['rows']) > 0:
+                            total_seconds_on_screen = rt_res['rows'][0][1] 
+                            st.session_state.ui_screen = float(round(total_seconds_on_screen / 3600, 1))
+                            st.success(f"📱 Phone Screen Time Synced: {st.session_state.ui_screen} hours")
+                        else:
+                            st.session_state.ui_screen = 5.0 # Fallback if no data today
+                            # Show us what RescueTime actually sent back!
+                            st.warning(f"RescueTime connected, but found 0 data for today. Raw API Response: {rt_res}")
+                            
+                    except Exception as e:
+                        st.session_state.ui_screen = 5.0 # Fallback
+                        # DEBUG: Show us the exact crash reason
+                        st.error(f"RescueTime API crashed. Reason: {e}")
+                        
                     time.sleep(2)
                     st.rerun() # Refresh the UI with live data
                     
@@ -181,6 +210,8 @@ with st.sidebar:
             else:
                 st.error(f"OAuth2 Handshake Failed!")
                 st.code(token_response.text)
+                
+            
 
     # UI Buttons based on connection status
     if not st.session_state.connected:
@@ -210,8 +241,8 @@ with st.sidebar:
     stress = st.slider("Stress Level (1-10)", min_value=1, max_value=10, value=int(st.session_state.ui_stress))
     caffeine = st.number_input("Caffeine (mg)", min_value=0, max_value=1000, value=int(st.session_state.ui_caffeine))
     alcohol = st.number_input("Alcohol (Units)", min_value=0, max_value=10, value=int(st.session_state.ui_alcohol))
+    # It now auto-fills with the live data from RescueTime!
     screen = st.number_input("Screen Time (Hours)", min_value=0.0, max_value=18.0, value=float(st.session_state.ui_screen))
-
 # --- Complex Derived Metrics ---
 time_in_bed = duration / (efficiency / 100) if efficiency > 0 else 0
 awake_time = time_in_bed - duration
