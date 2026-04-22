@@ -1,5 +1,6 @@
-streamlit
 torch
+torchvision
+streamlit
 pandas
 numpy
 scikit-learn
